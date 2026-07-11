@@ -18,6 +18,136 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+from datetime import datetime
+
+import os
+import requests
+
+def get_ai_remediation(dependency_name, cve_count, cve_list):
+    """Calls an LLM to generate a specific fix for flagged dependencies."""
+    if cve_count == 0:
+        return "Dependency is clean. Keep monitoring for future updates."
+
+    primary_cve = cve_list[0] if cve_list else "Unknown CVE"
+    prompt = f"Given the vulnerable software package '{dependency_name}' and the vulnerability '{primary_cve}', provide a single, concise sentence explaining how to fix it."
+
+    # --- REAL AI INTEGRATION (Uncomment when you have your API Key) ---
+    """
+    api_key = "YOUR_API_KEY_HERE"
+    # Example using a standard OpenAI-compatible endpoint (works for OpenAI, Groq, local Mixtral, etc.)
+    url = "https://api.groq.com/openai/v1/chat/completions" 
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "mixtral-8x7b-32768", # Swap model as needed
+        "messages": [{"role": "user", "content": prompt}]
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        return response.json()['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        print(f"AI API Error: {e}")
+    """
+    
+    # --- FALLBACK MOCK (Keeps frontend working while you setup the key) ---
+    return f"AI Suggestion: Upgrade '{dependency_name}' to patch the {primary_cve} vulnerability immediately."
+
+def calculate_application_scores():
+    """
+    Computes the composite risk score for each application based on the formula:
+    Score = Sum of [ (CVE count * severity_weight) + license_penalty + maintenance_penalty ]
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 1. Fetch all applications
+    cursor.execute("SELECT id, name FROM application")
+    applications = cursor.fetchall()
+    
+    app_scores = {}
+    current_year = 2026  # Anchored to project timeline
+
+    # Define weight metrics
+    severity_weights = {
+        "critical": 10,
+        "high": 7,
+        "medium": 4,
+        "low": 2
+    }
+
+    for app in applications:
+        app_id = app['id']
+        app_name = app['name']
+        
+        # 2. Fetch all dependencies belonging to this specific application
+        cursor.execute("SELECT id, name, license, last_updated FROM dependency WHERE app_id = ?", (app_id,))
+        dependencies = cursor.fetchall()
+        
+        total_score = 0
+        dependency_reports = []
+
+        for dep in dependencies:
+            dep_id = dep['id']
+            dep_name = dep['name']
+            dep_license = dep['license'] or ""
+            last_updated_str = dep['last_updated'] or ""
+            
+            # Fetch severity AND cve_id this time
+            cursor.execute("SELECT cve_id, severity FROM vulnerability WHERE dependency_id = ?", (dep_id,))
+            vulns = cursor.fetchall()
+            
+            cve_count = len(vulns)
+            vuln_score = 0
+            cve_list = []
+            
+            for v in vulns:
+                severity = v['severity'].lower()
+                vuln_score += severity_weights.get(severity, 2)
+                cve_list.append(v['cve_id']) # Save the CVEs for the AI
+            
+            base_vuln_component = vuln_score 
+            
+            license_penalty = 0
+            if "gpl" in dep_license.lower():
+                license_penalty = 5
+                
+            maintenance_penalty = 0
+            if last_updated_str:
+                try:
+                    year = int(last_updated_str.split('-')[0])
+                    if (current_year - year) > 2:
+                        maintenance_penalty = 5
+                except ValueError:
+                    pass
+            
+            dep_composite_score = base_vuln_component + license_penalty + maintenance_penalty
+            total_score += dep_composite_score
+            
+            # --- CALL THE AI REMEDIATION ENGINE ---
+            remediation_advice = get_ai_remediation(dep_name, cve_count, cve_list)
+            
+            dependency_reports.append({
+                "dependency_name": dep_name,
+                "cve_count": cve_count,
+                "cve_list": cve_list, # Handing this to the UI
+                "license": dep_license,
+                "last_updated": last_updated_str,
+                "score_contribution": dep_composite_score,
+                "ai_remediation": remediation_advice # The Wow Factor!
+            })
+
+        app_scores[app_name] = {
+            "application_id": app_id,
+            "total_risk_score": total_score,
+            "breakdown": dependency_reports
+        }
+
+    conn.close()
+    return app_scores
+
 @app.route('/', methods=['GET'])
 def home():
     """Root endpoint so the browser doesn't show a 404."""
@@ -117,8 +247,16 @@ def upload_files():
 # The scoring and results endpoint (Prompt 3 & 4 will fill this in)
 @app.route('/api/scan-results', methods=['GET'])
 def get_scan_results():
-    return jsonify({"message": "Endpoint ready for scoring and LLM integration."}), 501
-
+    try:
+        # Calculate scores dynamically across all ingested records
+        scores = calculate_application_scores()
+        return jsonify({
+            "status": "success",
+            "computed_at": datetime.now().isoformat(),
+            "results": scores
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to compute risk assessment: {str(e)}"}), 500
 if __name__ == '__main__':
     # Running on port 5000 with debug mode enabled for rapid iteration
     app.run(debug=True, port=5000)

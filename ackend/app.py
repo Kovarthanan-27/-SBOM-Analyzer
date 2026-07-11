@@ -14,6 +14,15 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+@app.route('/', methods=['GET'])
+def home():
+    """Root endpoint so the browser doesn't show a 404."""
+    return jsonify({
+        "status": "online", 
+        "project": "SBOM Analyzer",
+        "message": "API is running. Frontend should connect to /api/ endpoints."
+    }), 200
+    
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Simple endpoint to verify the server is running."""

@@ -1,0 +1,14 @@
+[
+  {
+    "cve_id": "CVE-2021-44228",
+    "package": "log4j",
+    "severity": "Critical",
+    "cvss": 9.8
+  },
+  {
+    "cve_id": "CVE-2023-38325",
+    "package": "requests",
+    "severity": "Medium",
+    "cvss": 5.3
+  }
+]

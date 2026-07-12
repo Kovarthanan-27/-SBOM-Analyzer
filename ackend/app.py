@@ -52,23 +52,26 @@ def get_ai_remediation(dependency_name, cve_count, cve_list):
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "mixtral-8x7b-32768", 
+        "model": "llama-3.1-8b-instant", 
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.2, # Low temperature keeps the AI factual and prevents hallucinated fluff
-        "max_tokens": 60    # Forces the response to be short so it fits nicely in your UI table
+        "temperature": 0.2, 
+        "max_tokens": 60    
     }
     
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=5)
-        response.raise_for_status() # Catches 401 Unauthorized or 429 Too Many Requests
         
-        # Extract the text and strip out any accidental quotes the AI might add
+        # NEW: If it fails, print the exact reason Groq gives us before throwing the error
+        if response.status_code != 200:
+            print(f"Groq Rejection Details: {response.text}")
+            
+        response.raise_for_status() 
+        
         ai_text = response.json()['choices'][0]['message']['content'].strip(' "\'')
         return ai_text
         
     except requests.exceptions.RequestException as e:
         print(f"AI API Error: {e}")
-        # If the API times out or fails, return a sensible default so the UI doesn't break
         return f"Patch '{dependency_name}' to resolve {primary_cve}."
 
         

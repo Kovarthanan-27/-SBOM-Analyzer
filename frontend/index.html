@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SBOM Manifest — Risk Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Bitter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EAE4D4;
+    --paper-dark:#DED5BE;
+    --ink:#1C1B19;
+    --ink-soft:#514C42;
+    --rule:#8B8574;
+    --stamp-red:#A5372B;
+    --stamp-green:#3F5B41;
+    --stamp-amber:#B47A24;
+    --card-bg:#F4F0E4;
+    --shadow: 0 1px 0 rgba(28,27,25,0.08);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    background-image:
+      repeating-linear-gradient(0deg, rgba(28,27,25,0.025) 0px, rgba(28,27,25,0.025) 1px, transparent 1px, transparent 3px);
+    color:var(--ink);
+    font-family:'IBM Plex Mono', monospace;
+    min-height:100vh;
+    padding:0 0 80px;
+  }
+  ::selection{background:var(--stamp-red);color:var(--paper);}
+
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px;}
+
+  /* Header / cover sheet */
+  header.cover{
+    border-bottom:3px double var(--ink);
+    padding:36px 0 22px;
+    margin-bottom:36px;
+  }
+  .eyebrow{
+    font-size:11px;
+    letter-spacing:.18em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    display:flex;
+    justify-content:space-between;
+    margin-bottom:18px;
+  }
+  h1{
+    font-family:'Bitter', serif;
+    font-weight:800;
+    font-size:clamp(28px, 5vw, 44px);
+    margin:0 0 6px;
+    letter-spacing:-0.01em;
+  }
+  .sub{
+    color:var(--ink-soft);
+    font-size:13px;
+    max-width:56ch;
+    line-height:1.5;
+  }
+
+  /* Upload manifest form */
+  .form-sheet{
+    background:var(--card-bg);
+    border:1.5px solid var(--ink);
+    box-shadow: 4px 4px 0 rgba(28,27,25,0.12);
+    padding:28px;
+    margin-bottom:40px;
+  }
+  .form-sheet h2{
+    font-family:'Bitter', serif;
+    font-size:16px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    margin:0 0 20px;
+    padding-bottom:10px;
+    border-bottom:1px solid var(--rule);
+  }
+  .field-row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:18px;
+    margin-bottom:18px;
+  }
+  @media (max-width:620px){ .field-row{grid-template-columns:1fr;} }
+
+  .field{
+    border:1.5px dashed var(--rule);
+    padding:16px;
+    background:rgba(255,255,255,0.25);
+    position:relative;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .field.has-file{border-style:solid; border-color:var(--stamp-green); background:rgba(63,91,65,0.06);}
+  .field.drag{border-color:var(--stamp-amber); background:rgba(180,122,36,0.08);}
+  .field label.field-label{
+    display:block;
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:.12em;
+    color:var(--ink-soft);
+    margin-bottom:8px;
+  }
+  .field .filename{
+    font-size:13px;
+    font-weight:600;
+    min-height:18px;
+    word-break:break-all;
+  }
+  .field .hint{font-size:11px;color:var(--ink-soft); margin-top:4px;}
+  .field input[type=file]{
+    position:absolute; inset:0; width:100%; height:100%;
+    opacity:0; cursor:pointer;
+  }
+
+  .submit-row{display:flex; align-items:center; gap:16px; margin-top:22px;}
+  button.stamp-btn{
+    font-family:'Bitter', serif;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    font-size:14px;
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    padding:14px 28px;
+    cursor:pointer;
+    transition:transform .1s ease, background .15s ease;
+  }
+  button.stamp-btn:hover{background:var(--stamp-red);}
+  button.stamp-btn:active{transform:scale(.97);}
+  button.stamp-btn:disabled{background:var(--rule); cursor:not-allowed;}
+  .status-line{font-size:12px; color:var(--ink-soft);}
+  .status-line.err{color:var(--stamp-red); font-weight:600;}
+
+  /* Results */
+  #results{display:none;}
+  #results.show{display:block;}
+
+  .ledger-summary{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1px;
+    background:var(--ink);
+    border:1.5px solid var(--ink);
+    margin-bottom:32px;
+  }
+  @media (max-width:620px){ .ledger-summary{grid-template-columns:1fr;} }
+  .ledger-summary .cell{
+    background:var(--card-bg);
+    padding:18px 20px;
+  }
+  .ledger-summary .num{
+    font-family:'Bitter', serif;
+    font-size:30px;
+    font-weight:800;
+    line-height:1;
+  }
+  .ledger-summary .lbl{
+    font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft); margin-top:6px;
+  }
+  .num.red{color:var(--stamp-red);}
+  .num.green{color:var(--stamp-green);}
+
+  /* App entry */
+  .entry{
+    border:1.5px solid var(--ink);
+    background:var(--card-bg);
+    margin-bottom:28px;
+    position:relative;
+    overflow:hidden;
+  }
+  .entry-head{
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:20px 24px;
+    border-bottom:1px solid var(--rule);
+    gap:16px;
+  }
+  .entry-head .app-name{
+    font-family:'Bitter', serif;
+    font-weight:700;
+    font-size:19px;
+  }
+  .entry-head .app-meta{
+    font-size:11px; color:var(--ink-soft); margin-top:4px;
+  }
+
+  .stamp{
+    font-family:'Bitter', serif;
+    font-weight:800;
+    font-size:12px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    border:3px solid currentColor;
+    border-radius:6px;
+    padding:8px 14px;
+    transform:rotate(-6deg);
+    white-space:nowrap;
+    position:relative;
+    flex-shrink:0;
+  }
+  .stamp::after{
+    content:'';
+    position:absolute; inset:3px;
+    border:1px solid currentColor;
+    border-radius:3px;
+    opacity:.5;
+  }
+  .stamp.critical{color:var(--stamp-red);}
+  .stamp.moderate{color:var(--stamp-amber);}
+  .stamp.clear{color:var(--stamp-green);}
+
+  .dep-table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  .dep-table th{
+    text-align:left; text-transform:uppercase; letter-spacing:.06em; font-size:10px;
+    color:var(--ink-soft); padding:10px 24px; border-bottom:1px solid var(--rule);
+  }
+  .dep-table td{
+    padding:10px 24px; border-bottom:1px solid rgba(139,133,116,0.35); vertical-align:top;
+  }
+  .dep-table tr:last-child td{border-bottom:none;}
+  .dep-table tr.flagged td:first-child{border-left:3px solid var(--stamp-red);}
+  .dep-table tr.clean td:first-child{border-left:3px solid var(--stamp-green);}
+  .dep-name{font-weight:600;}
+  .dep-score{font-weight:700; text-align:right;}
+  .remediation{color:var(--ink-soft); font-style:italic;}
+
+  .empty-state{
+    text-align:center; padding:60px 20px; color:var(--ink-soft); font-size:13px;
+  }
+
+  footer{
+    margin-top:60px; padding-top:18px; border-top:1px solid var(--rule);
+    font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.1em;
+  }
+
+  code.inline{background:rgba(28,27,25,0.08); padding:1px 5px; font-size:11.5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="cover">
+    <div class="eyebrow">
+      <span>Form SBOM-02</span>
+      <span id="clock"></span>
+    </div>
+    <h1>Software Bill of Materials<br>Risk Ledger</h1>
+    <p class="sub">Declare your application's dependency manifest and known-vulnerability register below. Every entry is cross-referenced, scored, and stamped.</p>
+  </header>
+
+  <section class="form-sheet">
+    <h2>Manifest Intake</h2>
+    <form id="uploadForm">
+      <div class="field-row">
+        <div class="field" id="fieldSbom">
+          <label class="field-label">01 — Dependency Manifest (.csv)</label>
+          <div class="filename" data-empty="No file selected">No file selected</div>
+          <div class="hint">app_name, library_name, version, license, is_transitive, last_updated</div>
+          <input type="file" id="sbomFile" accept=".csv" required>
+        </div>
+        <div class="field" id="fieldVuln">
+          <label class="field-label">02 — Vulnerability Register (.json)</label>
+          <div class="filename" data-empty="No file selected">No file selected</div>
+          <div class="hint">cve_id, package, severity, cvss</div>
+          <input type="file" id="vulnFile" accept=".json" required>
+        </div>
+      </div>
+      <div class="submit-row">
+        <button type="submit" class="stamp-btn" id="submitBtn">Submit &amp; Scan</button>
+        <span class="status-line" id="statusLine"></span>
+      </div>
+    </form>
+  </section>
+
+  <section id="results">
+    <div class="ledger-summary" id="ledgerSummary"></div>
+    <div id="entries"></div>
+  </section>
+
+  <div class="empty-state" id="emptyState">Awaiting first manifest submission.</div>
+
+  <footer>SBOM Risk Ledger — internal audit tool — generated client-side</footer>
+</div>
+
+<script>
+// ---- CONFIG ----
+const API_BASE = 'http://127.0.0.1:5000';
+
+// ---- Clock ----
+function tick(){
+  const d = new Date();
+  document.getElementById('clock').textContent = d.toLocaleDateString(undefined,{year:'numeric',month:'2-digit',day:'2-digit'}) + ' · ' + d.toLocaleTimeString();
+}
+tick(); setInterval(tick,1000);
+
+// ---- File field wiring ----
+function wireField(fieldId, inputId){
+  const field = document.getElementById(fieldId);
+  const input = document.getElementById(inputId);
+  const nameEl = field.querySelector('.filename');
+  const emptyText = nameEl.dataset.empty;
+
+  function setFile(file){
+    if(file){
+      nameEl.textContent = file.name;
+      field.classList.add('has-file');
+    } else {
+      nameEl.textContent = emptyText;
+      field.classList.remove('has-file');
+    }
+  }
+
+  input.addEventListener('change', () => setFile(input.files[0]));
+
+  ['dragenter','dragover'].forEach(evt =>
+    field.addEventListener(evt, e => { e.preventDefault(); field.classList.add('drag'); })
+  );
+  ['dragleave','drop'].forEach(evt =>
+    field.addEventListener(evt, e => { e.preventDefault(); field.classList.remove('drag'); })
+  );
+  field.addEventListener('drop', e => {
+    const file = e.dataTransfer.files[0];
+    if(file){
+      input.files = e.dataTransfer.files;
+      setFile(file);
+    }
+  });
+}
+wireField('fieldSbom','sbomFile');
+wireField('fieldVuln','vulnFile');
+
+// ---- Severity weights (mirrors backend formula, for display heuristics) ----
+const SEVERITY_ORDER = {critical:3, high:2, medium:1, low:0};
+
+function remediationFor(dep){
+  if(!dep.cve_count) return 'No known CVEs — no action required.';
+  const worst = (dep.worst_severity || 'medium').toLowerCase();
+  const suggestions = {
+    critical: `Patch or replace "${dep.dependency_name}" immediately — critical CVE(s) present.`,
+    high: `Upgrade "${dep.dependency_name}" to the latest stable release this sprint.`,
+    medium: `Schedule an update for "${dep.dependency_name}" in the next maintenance window.`,
+    low: `Low-priority — track "${dep.dependency_name}" for the next dependency sweep.`
+  };
+  return suggestions[worst] || suggestions.medium;
+}
+
+function stampTierFor(score){
+  if(score >= 20) return {cls:'critical', label:'Critical'};
+  if(score >= 8) return {cls:'moderate', label:'Flagged'};
+  return {cls:'clear', label:'Clear'};
+}
+
+// ---- Render ----
+function renderResults(payload){
+  const results = payload.results || {};
+  const appNames = Object.keys(results);
+
+  document.getElementById('emptyState').style.display = 'none';
+  const resultsEl = document.getElementById('results');
+  resultsEl.classList.add('show');
+
+  // Summary
+  let totalApps = appNames.length;
+  let totalDeps = 0, flaggedDeps = 0, totalCves = 0;
+  appNames.forEach(name => {
+    const app = results[name];
+    (app.breakdown || []).forEach(dep => {
+      totalDeps++;
+      totalCves += dep.cve_count || 0;
+      if((dep.cve_count || 0) > 0) flaggedDeps++;
+    });
+  });
+
+  const summaryEl = document.getElementById('ledgerSummary');
+  summaryEl.innerHTML = `
+    <div class="cell"><div class="num">${totalApps}</div><div class="lbl">Applications scanned</div></div>
+    <div class="cell"><div class="num ${flaggedDeps ? 'red':'green'}">${flaggedDeps} / ${totalDeps}</div><div class="lbl">Dependencies flagged</div></div>
+    <div class="cell"><div class="num ${totalCves ? 'red':'green'}">${totalCves}</div><div class="lbl">Known CVEs matched</div></div>
+  `;
+
+  // Entries
+  const entriesEl = document.getElementById('entries');
+  entriesEl.innerHTML = '';
+
+  appNames.forEach(name => {
+    const app = results[name];
+    const deps = app.breakdown || [];
+    const tier = stampTierFor(app.total_risk_score || 0);
+
+    const entry = document.createElement('div');
+    entry.className = 'entry';
+
+    const rows = deps.map(dep => {
+      const flaggedClass = (dep.cve_count || 0) > 0 ? 'flagged' : 'clean';
+      return `
+        <tr class="${flaggedClass}">
+          <td class="dep-name">${escapeHtml(dep.dependency_name)}</td>
+          <td>${escapeHtml(dep.license || '—')}</td>
+          <td>${escapeHtml(dep.last_updated || '—')}</td>
+          <td>${dep.cve_count || 0}</td>
+          <td class="dep-score">${dep.score_contribution}</td>
+          <td class="remediation">${escapeHtml(remediationFor(dep))}</td>
+        </tr>`;
+    }).join('');
+
+    entry.innerHTML = `
+      <div class="entry-head">
+        <div>
+          <div class="app-name">${escapeHtml(name)}</div>
+          <div class="app-meta">Application ID ${app.application_id} &middot; ${deps.length} dependencies declared</div>
+        </div>
+        <div class="stamp ${tier.cls}">${tier.label} &middot; ${app.total_risk_score}</div>
+      </div>
+      <table class="dep-table">
+        <thead>
+          <tr><th>Library</th><th>License</th><th>Last updated</th><th>CVEs</th><th>Score</th><th>Remediation</th></tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="6" style="padding:20px 24px;color:var(--ink-soft);">No dependencies recorded.</td></tr>'}</tbody>
+      </table>
+    `;
+    entriesEl.appendChild(entry);
+  });
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+// ---- Submit flow ----
+const form = document.getElementById('uploadForm');
+const statusLine = document.getElementById('statusLine');
+const submitBtn = document.getElementById('submitBtn');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const sbomFile = document.getElementById('sbomFile').files[0];
+  const vulnFile = document.getElementById('vulnFile').files[0];
+
+  if(!sbomFile || !vulnFile){
+    statusLine.textContent = 'Both files are required before submission.';
+    statusLine.classList.add('err');
+    return;
+  }
+
+  statusLine.classList.remove('err');
+  statusLine.textContent = 'Uploading manifest…';
+  submitBtn.disabled = true;
+
+  const formData = new FormData();
+  formData.append('sbom_file', sbomFile);
+  formData.append('vuln_file', vulnFile);
+
+  try {
+    const uploadRes = await fetch(`${API_BASE}/api/upload`, { method:'POST', body: formData });
+    const uploadJson = await uploadRes.json();
+    if(!uploadRes.ok) throw new Error(uploadJson.error || 'Manifest rejected by server.');
+
+    statusLine.textContent = `Manifest accepted — ${uploadJson.applications_processed} application(s). Calculating risk…`;
+
+    const scanRes = await fetch(`${API_BASE}/api/scan-results`);
+    const scanJson = await scanRes.json();
+    if(!scanRes.ok) throw new Error(scanJson.error || 'Scoring failed.');
+
+    renderResults(scanJson);
+    statusLine.textContent = `Ledger updated at ${new Date(scanJson.computed_at).toLocaleTimeString()}.`;
+  } catch(err){
+    statusLine.textContent = `Error: ${err.message}. Is the backend running at ${API_BASE}?`;
+    statusLine.classList.add('err');
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

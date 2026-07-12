@@ -1,0 +1,20 @@
+[
+  {
+    "cve_id": "CVE-2022-42003",
+    "package": "jackson-databind",
+    "severity": "High",
+    "cvss": 7.5
+  },
+  {
+    "cve_id": "CVE-2017-5638",
+    "package": "struts2",
+    "severity": "Critical",
+    "cvss": 10.0
+  },
+  {
+    "cve_id": "CVE-2023-24998",
+    "package": "commons-fileupload",
+    "severity": "Medium",
+    "cvss": 5.3
+  }
+]

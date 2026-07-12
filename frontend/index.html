@@ -404,7 +404,7 @@ function renderResults(payload){
           <td>${escapeHtml(dep.last_updated || '—')}</td>
           <td>${dep.cve_count || 0}</td>
           <td class="dep-score">${dep.score_contribution}</td>
-          <td class="remediation">${escapeHtml(remediationFor(dep))}</td>
+          <td class="remediation">${escapeHtml(dep.ai_remediation || remediationFor(dep))}</td>
         </tr>`;
     }).join('');
 

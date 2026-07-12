@@ -4,6 +4,12 @@ import sqlite3
 import csv
 import json
 import io
+import os
+import requests
+from dotenv import load_dotenv
+
+# Load the .env file immediately
+load_dotenv()
 # ... (keep your existing imports and setup) ...
 
 app = Flask(__name__)
@@ -24,37 +30,48 @@ import os
 import requests
 
 def get_ai_remediation(dependency_name, cve_count, cve_list):
-    """Calls an LLM to generate a specific fix for flagged dependencies."""
+    """Calls the Groq Mixtral LLM to generate a specific fix for flagged dependencies."""
     if cve_count == 0:
-        return "Dependency is clean. Keep monitoring for future updates."
+        return "No known CVEs — no action required."
 
     primary_cve = cve_list[0] if cve_list else "Unknown CVE"
-    prompt = f"Given the vulnerable software package '{dependency_name}' and the vulnerability '{primary_cve}', provide a single, concise sentence explaining how to fix it."
+    
+    # Strict prompt engineering to force a single, actionable sentence
+    prompt = f"You are a cybersecurity expert. The software package '{dependency_name}' has the vulnerability '{primary_cve}'. Provide exactly one concise, actionable sentence explaining how a developer should fix or mitigate this."
 
-    # --- REAL AI INTEGRATION (Uncomment when you have your API Key) ---
-    """
-    api_key = "YOUR_API_KEY_HERE"
-    # Example using a standard OpenAI-compatible endpoint (works for OpenAI, Groq, local Mixtral, etc.)
+    api_key = os.getenv("GROQ_API_KEY")
+    
+    # Safety net: If the API key isn't found, fall back gracefully instead of crashing
+    if not api_key:
+        print("Warning: GROQ_API_KEY not found. Using fallback text.")
+        return f"AI Suggestion: Upgrade '{dependency_name}' to patch the {primary_cve} vulnerability immediately."
+
     url = "https://api.groq.com/openai/v1/chat/completions" 
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "mixtral-8x7b-32768", # Swap model as needed
-        "messages": [{"role": "user", "content": prompt}]
+        "model": "mixtral-8x7b-32768", 
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.2, # Low temperature keeps the AI factual and prevents hallucinated fluff
+        "max_tokens": 60    # Forces the response to be short so it fits nicely in your UI table
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload)
-        return response.json()['choices'][0]['message']['content'].strip()
-    except Exception as e:
+        response = requests.post(url, headers=headers, json=payload, timeout=5)
+        response.raise_for_status() # Catches 401 Unauthorized or 429 Too Many Requests
+        
+        # Extract the text and strip out any accidental quotes the AI might add
+        ai_text = response.json()['choices'][0]['message']['content'].strip(' "\'')
+        return ai_text
+        
+    except requests.exceptions.RequestException as e:
         print(f"AI API Error: {e}")
-    """
-    
-    # --- FALLBACK MOCK (Keeps frontend working while you setup the key) ---
-    return f"AI Suggestion: Upgrade '{dependency_name}' to patch the {primary_cve} vulnerability immediately."
+        # If the API times out or fails, return a sensible default so the UI doesn't break
+        return f"Patch '{dependency_name}' to resolve {primary_cve}."
 
+        
 def calculate_application_scores():
     """
     Computes the composite risk score for each application based on the formula:
